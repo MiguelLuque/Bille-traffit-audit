@@ -1,10 +1,21 @@
 import JSZip from 'jszip';
-import { inflate } from 'pako';
+import { inflate, deflate } from 'pako';
 
-export interface ProcessingResult {
-  content: string;
-  type: 'xml' | 'final';
-  warning?: string;
+export type StepType = 
+  | 'decode-base64' 
+  | 'encode-base64' 
+  | 'decompress-gzip' 
+  | 'compress-gzip'
+  | 'decompress-zip'
+  | 'compress-zip'
+  | 'extract-xml'
+  | 'extract-json';
+
+export interface ProcessingStep {
+  id: string;
+  type: StepType;
+  xmlTag?: string;
+  jsonPath?: string;
 }
 
 export function isValidBase64(str: string): boolean {
@@ -15,33 +26,102 @@ export function isValidBase64(str: string): boolean {
   }
 }
 
-export async function decodeBase64ToFile(base64String: string): Promise<Uint8Array> {
+export async function processStep(content: string, step: ProcessingStep): Promise<string> {
+  switch (step.type) {
+    case 'decode-base64':
+      return await decodeBase64(content);
+    case 'encode-base64':
+      return btoa(content);
+    case 'decompress-gzip':
+      return await ungzipContent(content);
+    case 'compress-gzip':
+      return await gzipContent(content);
+    case 'decompress-zip':
+      return await unzipContent(content);
+    case 'compress-zip':
+      return await zipContent(content);
+    case 'extract-xml':
+      return extractFromXml(content, step.xmlTag || 'message');
+    case 'extract-json':
+      return extractFromJson(content, step.jsonPath || '');
+    default:
+      throw new Error('Invalid step type');
+  }
+}
+
+function extractFromJson(jsonString: string, path: string): string {
+  try {
+    const data = JSON.parse(jsonString);
+    
+    if (!path) {
+      throw new Error('JSON path is required');
+    }
+
+    const value = path.split('.').reduce((obj, key) => {
+      if (obj === undefined || obj === null) {
+        throw new Error(`Property '${key}' not found in path '${path}'`);
+      }
+      return obj[key];
+    }, data);
+
+    if (value === undefined || value === null) {
+      throw new Error(`Value at path '${path}' is null or undefined`);
+    }
+
+    return typeof value === 'object' ? JSON.stringify(value) : String(value);
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      throw new Error('Invalid JSON format');
+    }
+    if (error instanceof Error) {
+      throw error;
+    }
+    throw new Error('Failed to process JSON content');
+  }
+}
+
+async function decodeBase64(base64String: string): Promise<string> {
   if (!isValidBase64(base64String)) {
     throw new Error('Invalid base64 string provided');
   }
+  return atob(base64String);
+}
 
+async function ungzipContent(content: string): Promise<string> {
   try {
-    const binaryString = atob(base64String);
-    return Uint8Array.from(binaryString, (m) => m.charCodeAt(0));
+    // Convert base64 to binary data
+    const binaryData = Uint8Array.from(atob(content), c => c.charCodeAt(0));
+    
+    // Decompress the binary data
+    const inflated = inflate(binaryData);
+    
+    // Convert the decompressed data to string
+    return new TextDecoder().decode(inflated);
   } catch (error) {
-    throw new Error('Failed to decode base64 string');
+    throw new Error('Failed to decompress gzip content. Make sure the input is base64 encoded gzip data.');
   }
 }
 
-export async function ungzipFile(data: Uint8Array): Promise<string> {
+async function gzipContent(content: string): Promise<string> {
   try {
-    const inflated = inflate(data);
-    const decoder = new TextDecoder('utf-8');
-    return decoder.decode(inflated);
+    // Convert string to binary data
+    const binaryData = new TextEncoder().encode(content);
+    
+    // Compress the binary data
+    const deflated = deflate(binaryData);
+    
+    // Convert compressed data to base64
+    return btoa(String.fromCharCode.apply(null, deflated));
   } catch (error) {
-    throw new Error('Failed to decompress gzip file. The file might be corrupted or not a valid gzip file.');
+    throw new Error('Failed to compress content with gzip');
   }
 }
 
-export async function unzipFile(data: Uint8Array): Promise<string> {
+async function unzipContent(content: string): Promise<string> {
   try {
     const zip = new JSZip();
-    const result = await zip.loadAsync(data, { checkCRC32: true });
+    const binaryData = Uint8Array.from(atob(content), c => c.charCodeAt(0));
+    const result = await zip.loadAsync(binaryData);
     const files = Object.values(result.files);
     
     if (files.length === 0) {
@@ -50,50 +130,42 @@ export async function unzipFile(data: Uint8Array): Promise<string> {
     
     return await files[0].async('string');
   } catch (error) {
-    if (error instanceof Error && error.message.includes('Central Directory')) {
-      throw new Error('Invalid ZIP file format. The file might be corrupted or not a ZIP file.');
-    }
-    throw error;
+    throw new Error('Failed to decompress zip content. Make sure the input is base64 encoded zip data.');
   }
 }
 
-export function extractMessageFromXml(xmlString: string): ProcessingResult {
+async function zipContent(content: string): Promise<string> {
+  try {
+    const zip = new JSZip();
+    zip.file('content.txt', content);
+    const zipped = await zip.generateAsync({type: 'uint8array'});
+    return btoa(String.fromCharCode.apply(null, zipped));
+  } catch (error) {
+    throw new Error('Failed to compress content with zip');
+  }
+}
+
+function extractFromXml(xmlString: string, tag: string): string {
   try {
     const parser = new DOMParser();
     const xmlDoc = parser.parseFromString(xmlString, 'text/xml');
     
-    // Check for XML parsing errors
     const parseError = xmlDoc.getElementsByTagName('parsererror');
     if (parseError.length > 0) {
       throw new Error('Invalid XML format');
     }
     
-    const messageElement = xmlDoc.getElementsByTagName('message')[0];
-    if (!messageElement) {
-      // Format the XML string for better readability
-      const serializer = new XMLSerializer();
-      const formattedXml = serializer.serializeToString(xmlDoc)
-        .replace(/(>)(<)(\/*)/g, '$1\n$2$3')
-        .replace(/<(.*?)>/g, '\n$&')
-        .replace(/^\s*\n/gm, '')
-        .trim();
-      
-      return {
-        content: formattedXml,
-        type: 'xml',
-        warning: 'No message tag found in XML. Displaying the XML content instead.'
-      };
+    const element = xmlDoc.getElementsByTagName(tag)[0];
+    if (!element) {
+      throw new Error(`Tag <${tag}> not found in XML`);
     }
     
-    const content = messageElement.textContent;
+    const content = element.textContent;
     if (!content) {
-      throw new Error('Empty message content');
+      throw new Error(`Empty content in tag <${tag}>`);
     }
     
-    return {
-      content,
-      type: 'final'
-    };
+    return content;
   } catch (error) {
     if (error instanceof Error) {
       throw error;
