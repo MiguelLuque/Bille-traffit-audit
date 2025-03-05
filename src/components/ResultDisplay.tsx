@@ -1,8 +1,13 @@
 import React, { useState } from 'react';
-import { Braces, Copy, CheckCircle2 } from 'lucide-react';
+import { Copy, Check, Code, Braces, Lock, Unlock, Archive, Database, Link, Layers } from 'lucide-react';
 import { Light as SyntaxHighlighter } from 'react-syntax-highlighter';
+import json from 'react-syntax-highlighter/dist/esm/languages/hljs/json';
+import xml from 'react-syntax-highlighter/dist/esm/languages/hljs/xml';
 import { vs2015 } from 'react-syntax-highlighter/dist/esm/styles/hljs';
 import type { ProcessingStep } from '../utils/fileProcessing';
+
+SyntaxHighlighter.registerLanguage('json', json);
+SyntaxHighlighter.registerLanguage('xml', xml);
 
 interface ResultDisplayProps {
   step: ProcessingStep;
@@ -11,86 +16,161 @@ interface ResultDisplayProps {
 }
 
 export function ResultDisplay({ step, result, index }: ResultDisplayProps) {
-  const [isPretty, setIsPretty] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [isPretty, setIsPretty] = useState(true);
+  const [isCopied, setIsCopied] = useState(false);
 
   const prettifyContent = (content: string): string => {
     try {
-      // Try to parse and stringify as JSON
-      const parsed = JSON.parse(content);
-      return JSON.stringify(parsed, null, 2);
-    } catch {
-      try {
-        // Try to parse and format as XML
-        const parser = new DOMParser();
-        const xmlDoc = parser.parseFromString(content, 'text/xml');
-        if (!xmlDoc.getElementsByTagName('parsererror').length) {
-          const serializer = new XMLSerializer();
-          return serializer.serializeToString(xmlDoc)
-            .replace(/(>)(<)(\/*)/g, '$1\n$2$3')
-            .replace(/<(.*?)>/g, '\n$&')
-            .replace(/^\s*\n/gm, '')
-            .trim();
-        }
-      } catch { }
+      if (content.trim().startsWith('<') && content.trim().endsWith('>')) {
+        // Intentar formatear como XML
+        const formatted = content
+          .replace(/></g, '>\n<')
+          .replace(/>\s*</g, '>\n<')
+          .replace(/(<[^>]+>)(?![\s\n])/g, '$1\n');
+        return formatted;
+      } else if (
+        (content.trim().startsWith('{') && content.trim().endsWith('}')) ||
+        (content.trim().startsWith('[') && content.trim().endsWith(']'))
+      ) {
+        // Intentar formatear como JSON
+        return JSON.stringify(JSON.parse(content), null, 2);
+      }
+    } catch (e) {
+      // Si hay un error al formatear, devolver el contenido original
     }
-    // Return original content if neither JSON nor XML
     return content;
   };
 
-  const displayContent = isPretty ? prettifyContent(result) : result;
-
   const copyToClipboard = async () => {
-    await navigator.clipboard.writeText(displayContent);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    try {
+      await navigator.clipboard.writeText(result);
+      setIsCopied(true);
+      setTimeout(() => setIsCopied(false), 2000);
+    } catch (err) {
+      console.error('Error al copiar al portapapeles:', err);
+    }
   };
 
+  const getStepTypeInfo = () => {
+    if (step.type.includes('encode-base64') || step.type.includes('decode-base64')) {
+      return {
+        icon: <Code className="w-4 h-4" />,
+        bgColor: 'bg-blue-50',
+        textColor: 'text-blue-700',
+        borderColor: 'border-blue-200'
+      };
+    }
+    if (step.type.includes('compress') || step.type.includes('decompress')) {
+      return {
+        icon: <Archive className="w-4 h-4" />,
+        bgColor: 'bg-purple-50',
+        textColor: 'text-purple-700',
+        borderColor: 'border-purple-200'
+      };
+    }
+    if (step.type.includes('extract')) {
+      return {
+        icon: <Database className="w-4 h-4" />,
+        bgColor: 'bg-amber-50',
+        textColor: 'text-amber-700',
+        borderColor: 'border-amber-200'
+      };
+    }
+    if (step.type.includes('url')) {
+      return {
+        icon: <Link className="w-4 h-4" />,
+        bgColor: 'bg-green-50',
+        textColor: 'text-green-700',
+        borderColor: 'border-green-200'
+      };
+    }
+    if (step.type.includes('encrypt') || step.type.includes('decrypt')) {
+      return {
+        icon: step.type.includes('encrypt') ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />,
+        bgColor: step.type.includes('encrypt') ? 'bg-red-50' : 'bg-teal-50',
+        textColor: step.type.includes('encrypt') ? 'text-red-700' : 'text-teal-700',
+        borderColor: step.type.includes('encrypt') ? 'border-red-200' : 'border-teal-200'
+      };
+    }
+    return {
+      icon: <Layers className="w-4 h-4" />,
+      bgColor: 'bg-gray-50',
+      textColor: 'text-gray-700',
+      borderColor: 'border-gray-200'
+    };
+  };
+
+  const { icon, bgColor, textColor, borderColor } = getStepTypeInfo();
+
+  // Determinar el lenguaje para el resaltador de sintaxis
+  let language = 'text';
+  if (
+    (result.trim().startsWith('{') && result.trim().endsWith('}')) ||
+    (result.trim().startsWith('[') && result.trim().endsWith(']'))
+  ) {
+    language = 'json';
+  } else if (result.trim().startsWith('<') && result.trim().endsWith('>')) {
+    language = 'xml';
+  }
+
   return (
-    <div className="bg-white rounded-lg shadow-md overflow-hidden">
-      <div className="bg-gray-800 px-4 py-3 text-white flex items-center justify-between">
-        <span className="text-sm font-medium">
-          Step {index + 1} Result: {step.type}
-          {step.type === 'extract-xml' && step.xmlTag && ` (Tag: ${step.xmlTag})`}
-          {step.type === 'extract-json' && step.jsonPath && ` (Path: ${step.jsonPath})`}
-          {step.type === 'encrypt-aes' && ` (${step.cipherMode}, ${step.padding}, ${step.keySize} bits)`}
-          {step.type === 'decrypt-aes' && ` (${step.cipherMode}, ${step.padding}, ${step.keySize} bits)`}
-        </span>
-        <div className="flex items-center space-x-3">
+    <div className="border border-gray-200 rounded-lg overflow-hidden shadow-sm">
+      <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-b border-gray-200">
+        <div className="flex items-center">
+          <div className={`flex items-center justify-center w-8 h-8 rounded-full ${bgColor} ${textColor} mr-3`}>
+            {icon}
+          </div>
+          <div>
+            <h3 className="text-sm font-medium text-gray-800">
+              Paso {index + 1}: {step.type}
+              {step.type === 'extract-xml' && step.xmlTag && ` (${step.xmlTag})`}
+              {step.type === 'extract-json' && step.jsonPath && ` (${step.jsonPath})`}
+              {step.type === 'encrypt-aes' && ` (${step.cipherMode}${step.padding ? `, ${step.padding}` : ''}${step.keySize ? `, ${step.keySize} bits` : ''})`}
+              {step.type === 'decrypt-aes' && ` (${step.cipherMode}${step.padding ? `, ${step.padding}` : ''}${step.keySize ? `, ${step.keySize} bits` : ''})`}
+            </h3>
+            <p className="text-xs text-gray-500 mt-0.5">
+              {result.length} caracteres
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center space-x-2">
           <button
             onClick={() => setIsPretty(!isPretty)}
-            className="p-1.5 text-gray-300 hover:text-white transition-colors"
-            title="Toggle pretty format"
+            className={`p-1.5 rounded-md ${isPretty ? 'bg-indigo-100 text-indigo-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'} transition-colors`}
+            title={isPretty ? "Mostrar formato plano" : "Mostrar formato bonito"}
           >
-            <Braces className="w-5 h-5" />
+            <Braces className="w-4 h-4" />
           </button>
           <button
             onClick={copyToClipboard}
-            className="p-1.5 text-gray-300 hover:text-white transition-colors"
-            title="Copy to clipboard"
+            className="p-1.5 rounded-md text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+            title="Copiar al portapapeles"
           >
-            {copied ? (
-              <CheckCircle2 className="w-5 h-5" />
-            ) : (
-              <Copy className="w-5 h-5" />
-            )}
+            {isCopied ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
           </button>
         </div>
       </div>
-      <SyntaxHighlighter
-        language={isPretty ? 'json' : 'plaintext'}
-        style={vs2015}
-        customStyle={{
-          margin: 0,
-          padding: '1.25rem',
-          fontSize: '0.9375rem',
-          lineHeight: '1.6',
-          maxHeight: '400px',
-          overflowY: 'auto'
-        }}
-      >
-        {displayContent}
-      </SyntaxHighlighter>
+      <div className="result-content-wrapper">
+        <SyntaxHighlighter
+          language={language}
+          style={vs2015}
+          customStyle={{
+            margin: 0,
+            padding: '1rem',
+            fontSize: '0.9375rem',
+            lineHeight: '1.6',
+            borderRadius: '0 0 0.5rem 0.5rem',
+            maxHeight: 'none',
+            overflowY: 'visible',
+            overflowX: 'auto'
+          }}
+          wrapLines={true}
+          wrapLongLines={false}
+          className="result-syntax-highlighter"
+        >
+          {isPretty ? prettifyContent(result) : result}
+        </SyntaxHighlighter>
+      </div>
     </div>
   );
 }
