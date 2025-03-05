@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { FileCode, FileText, Info, Menu, X, GripVertical, ArrowRightLeft } from 'lucide-react';
+import { FileCode, FileText, Info, Menu, X, GripVertical, ArrowRightLeft, Maximize2, Minimize2 } from 'lucide-react';
 import { processStep, type ProcessingStep } from './utils/fileProcessing';
 import { StepBuilder } from './components/StepBuilder';
 import { ProcessingPipeline } from './components/ProcessingPipeline';
@@ -21,6 +21,7 @@ function App() {
   const maxSidebarWidth = 1000; // Ancho máximo aumentado
   const [showWidthIndicator, setShowWidthIndicator] = useState(false);
   const defaultSidebarWidth = 650; // Valor predeterminado para restablecer
+  const [textareaExpanded, setTextareaExpanded] = useState(false);
 
   const processInput = async () => {
     if (steps.length === 0) {
@@ -104,6 +105,10 @@ function App() {
     }, 1000);
   };
 
+  const toggleTextareaSize = () => {
+    setTextareaExpanded(!textareaExpanded);
+  };
+
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col">
       {/* Header */}
@@ -134,7 +139,14 @@ function App() {
               <div className="flex items-center justify-between mb-2">
                 <label htmlFor="input" className="block text-sm font-medium text-gray-700">Entrada</label>
                 <div className="flex items-center">
-                  <span className="text-xs text-gray-500">{input.length} caracteres</span>
+                  <button
+                    onClick={toggleTextareaSize}
+                    className="p-1.5 text-gray-400 hover:text-gray-600 transition-colors rounded-md hover:bg-gray-100"
+                    title={textareaExpanded ? "Contraer" : "Expandir"}
+                  >
+                    {textareaExpanded ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+                  </button>
+                  <span className="ml-2 text-xs text-gray-500">{input.length} caracteres</span>
                   <button
                     onClick={resetSidebarWidth}
                     className="ml-2 p-1.5 text-gray-400 hover:text-gray-600 transition-colors rounded-md hover:bg-gray-100 hidden md:block"
@@ -153,8 +165,15 @@ function App() {
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   placeholder="Ingrese su texto aquí..."
-                  className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm py-2.5 pl-8 pr-3.5 h-40 resize-none"
+                  className={`block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm py-2.5 pl-8 pr-3.5 resize-y min-h-[160px] ${textareaExpanded ? 'h-80 max-h-[600px]' : 'h-40 max-h-[500px]'} transition-height duration-300`}
                 />
+                <div className="resize-indicator">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="22 12 18 12 18 8"></polyline>
+                    <path d="M2 2l20 20"></path>
+                    <path d="M18 12v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6a2 2 0 012-2h8"></path>
+                  </svg>
+                </div>
               </div>
               {input.length > 0 && (
                 <div className="mt-2 flex items-start">
