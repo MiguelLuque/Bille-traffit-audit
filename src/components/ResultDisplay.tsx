@@ -32,7 +32,7 @@ export function ResultDisplay({ step, result, index }: ResultDisplayProps) {
             .replace(/^\s*\n/gm, '')
             .trim();
         }
-      } catch {}
+      } catch { }
     }
     // Return original content if neither JSON nor XML
     return content;
@@ -48,29 +48,31 @@ export function ResultDisplay({ step, result, index }: ResultDisplayProps) {
 
   return (
     <div className="bg-white rounded-lg shadow-md overflow-hidden">
-      <div className="bg-gray-800 px-4 py-2 text-white flex items-center justify-between">
+      <div className="bg-gray-800 px-4 py-3 text-white flex items-center justify-between">
         <span className="text-sm font-medium">
           Step {index + 1} Result: {step.type}
           {step.type === 'extract-xml' && step.xmlTag && ` (Tag: ${step.xmlTag})`}
           {step.type === 'extract-json' && step.jsonPath && ` (Path: ${step.jsonPath})`}
+          {step.type === 'encrypt-aes' && ` (${step.cipherMode}, ${step.padding}, ${step.keySize} bits)`}
+          {step.type === 'decrypt-aes' && ` (${step.cipherMode}, ${step.padding}, ${step.keySize} bits)`}
         </span>
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center space-x-3">
           <button
             onClick={() => setIsPretty(!isPretty)}
-            className="p-1 text-gray-300 hover:text-white transition-colors"
+            className="p-1.5 text-gray-300 hover:text-white transition-colors"
             title="Toggle pretty format"
           >
-            <Braces className="w-4 h-4" />
+            <Braces className="w-5 h-5" />
           </button>
           <button
             onClick={copyToClipboard}
-            className="p-1 text-gray-300 hover:text-white transition-colors"
+            className="p-1.5 text-gray-300 hover:text-white transition-colors"
             title="Copy to clipboard"
           >
             {copied ? (
-              <CheckCircle2 className="w-4 h-4" />
+              <CheckCircle2 className="w-5 h-5" />
             ) : (
-              <Copy className="w-4 h-4" />
+              <Copy className="w-5 h-5" />
             )}
           </button>
         </div>
@@ -80,9 +82,11 @@ export function ResultDisplay({ step, result, index }: ResultDisplayProps) {
         style={vs2015}
         customStyle={{
           margin: 0,
-          padding: '1rem',
-          fontSize: '0.875rem',
-          lineHeight: '1.5',
+          padding: '1.25rem',
+          fontSize: '0.9375rem',
+          lineHeight: '1.6',
+          maxHeight: '400px',
+          overflowY: 'auto'
         }}
       >
         {displayContent}

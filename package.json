@@ -10,7 +10,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@types/crypto-js": "^4.2.2",
     "@vercel/analytics": "^1.5.0",
+    "crypto-js": "^4.2.0",
     "jszip": "^3.10.1",
     "lucide-react": "^0.344.0",
     "pako": "^2.1.0",

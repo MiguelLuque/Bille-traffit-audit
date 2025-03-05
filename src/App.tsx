@@ -54,22 +54,22 @@ function App() {
         <div className="bg-white rounded-lg shadow-md p-6">
           <div className="space-y-4">
             <div>
-              <label htmlFor="input" className="block text-sm font-medium text-gray-700">Input</label>
+              <label htmlFor="input" className="block text-sm font-medium text-gray-700 mb-2">Input</label>
               <textarea
                 id="input"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder="Enter your input text here..."
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm h-32"
+                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm h-40 py-3 px-4"
               />
             </div>
 
             <StepBuilder steps={steps} onChange={setSteps} />
-            
+
             {steps.length > 0 && (
               <ProcessingPipeline steps={steps} />
             )}
-            
+
             <button
               onClick={processInput}
               disabled={!input || steps.length === 0 || isProcessing}
